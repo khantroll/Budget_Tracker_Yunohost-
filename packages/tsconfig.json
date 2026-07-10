@@ -1,0 +1,39 @@
+{
+  "extends": "../../tsconfig.json",
+  "ts-node": {
+    "files": true
+  },
+  "compilerOptions": {
+    "strict": true,
+    "target": "es2023",
+    "lib": ["es2024"],
+    "useDefineForClassFields": false,
+    "module": "commonjs",
+    "outDir": "./dist",
+    "baseUrl": "./src",
+    "paths": {
+      "@routes/*": ["routes/*"],
+      "@middlewares/*": ["middlewares/*"],
+      "@crons/*": ["crons/*"],
+      "@common/*": ["common/*"],
+      "@controllers/*": ["controllers/*"],
+      "@models/*": ["models/*"],
+      "@tests/*": ["tests/*"],
+      "@js/*": ["js/*"],
+      "@i18n/*": ["i18n/*"],
+      "@root/*": ["./*"],
+      "@bt/shared/*": ["../../shared/src/*"],
+      "@services/*": ["services/*"],
+      "@config/*": ["config/*"]
+    },
+    "sourceMap": true,
+    "noImplicitAny": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "typeRoots": ["./node_modules/@types", "../../node_modules/@types", "./src/typings"]
+  },
+  "include": ["src/**/*", "src/tests/global.d.ts", "src/tests/custom-matchers.d.ts"],
+  "exclude": ["config/**/*", "src/migrations/**/*", "dist"]
+}
