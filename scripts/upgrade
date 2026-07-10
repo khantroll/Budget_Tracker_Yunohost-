@@ -1,0 +1,67 @@
+#!/bin/bash
+
+source _common.sh
+source /usr/share/yunohost/helpers
+
+app=$YNH_APP_INSTANCE_NAME
+
+port=$(ynh_app_setting_get --app=$app --key=port)
+db_name=$(ynh_app_setting_get --app=$app --key=db_name)
+db_user=$(ynh_app_setting_get --app=$app --key=db_user)
+db_pwd=$(ynh_app_setting_get --app=$app --key=db_pwd)
+auth_origin=$(ynh_app_setting_get --app=$app --key=auth_origin)
+public_base_url=$(ynh_app_setting_get --app=$app --key=public_base_url)
+jwt_secret=$(ynh_app_setting_get --app=$app --key=jwt_secret)
+session_secret=$(ynh_app_setting_get --app=$app --key=session_secret)
+better_auth_secret=$(ynh_app_setting_get --app=$app --key=better_auth_secret)
+redis_db=$(ynh_app_setting_get --app=$app --key=redis_db)
+path=$(ynh_app_setting_get --app=$app --key=path)
+domain=$(ynh_app_setting_get --app=$app --key=domain)
+
+ynh_systemd_action --service_name=$app --action="stop" 2>/dev/null || true
+
+#=================================================
+# RE-FETCH SOURCE AT PINNED TAG
+#=================================================
+
+# Bump this alongside manifest.toml's version when upstream releases a
+# new tag, then run `yunohost app upgrade`.
+upstream_version="v0.16.5"
+
+ynh_secure_remove --file="$install_dir"
+mkdir -p "$install_dir"
+ynh_exec_warn_less git clone --quiet --depth 1 --branch "$upstream_version" \
+    https://github.com/letehaha/budget-tracker.git "$install_dir"
+
+chmod 750 "$install_dir"
+chmod -R o-rwx "$install_dir"
+chown -R $app:www-data "$install_dir"
+
+#=================================================
+# REBUILD
+#=================================================
+
+ynh_install_nodejs --nodejs_version=$nodejs_version
+
+pushd "$install_dir"
+    ynh_exec_warn_less ynh_exec_as $app $ynh_node_load_PATH $ynh_npm ci
+    ynh_exec_warn_less ynh_exec_as $app $ynh_node_load_PATH \
+        $ynh_npm run build --workspace=$backend_workspace
+    ynh_exec_warn_less ynh_exec_as $app $ynh_node_load_PATH \
+        $ynh_npm run build --workspace=$frontend_workspace -- --base="${path}/"
+popd
+
+ynh_add_config --template="app.env" --destination="$install_dir/.env"
+chmod 400 "$install_dir/.env"
+chown $app:$app "$install_dir/.env"
+
+pushd "$install_dir"
+    ynh_exec_warn_less ynh_exec_as $app $ynh_node_load_PATH \
+        $ynh_npm run migrate --workspace=$backend_workspace
+popd
+
+ynh_add_systemd_config
+ynh_add_nginx_config
+
+ynh_systemd_action --service_name=$app --action="start" \
+    --log_path="/var/log/$app/$app.log" --line_match="listening"

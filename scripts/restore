@@ -1,0 +1,29 @@
+#!/bin/bash
+
+source _common.sh
+source /usr/share/yunohost/helpers
+
+app=$YNH_APP_INSTANCE_NAME
+db_name=$(ynh_app_setting_get --app=$app --key=db_name)
+db_user=$(ynh_app_setting_get --app=$app --key=db_user)
+db_pwd=$(ynh_app_setting_get --app=$app --key=db_pwd)
+
+ynh_restore_file --origin_path="$install_dir"
+ynh_restore_file --origin_path="/etc/nginx/conf.d/$domain.d/$app.conf"
+ynh_restore_file --origin_path="/etc/systemd/system/$app.service"
+ynh_restore_file --origin_path="/var/log/$app"
+
+chown -R $app:www-data "$install_dir"
+chown -R $app:$app "/var/log/$app"
+
+ynh_install_nodejs --nodejs_version=$nodejs_version
+
+ynh_psql_test_if_first_run
+ynh_psql_setup_db --db_user=$db_user --db_name=$db_name --db_pwd=$db_pwd
+ynh_psql_execute_file_as_root --file="./db.sql" --database="$db_name"
+
+systemctl enable $app.service --quiet
+yunohost service add $app --description="Budget Tracker backend" --log="/var/log/$app/$app.log"
+
+ynh_systemd_action --service_name=$app --action="start" \
+    --log_path="/var/log/$app/$app.log" --line_match="listening"

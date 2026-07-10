@@ -1,0 +1,135 @@
+#!/bin/bash
+
+source _common.sh
+source /usr/share/yunohost/helpers
+
+#=================================================
+# RETRIEVE ARGUMENTS
+#=================================================
+
+app=$YNH_APP_INSTANCE_NAME
+domain=$YNH_APP_ARG_DOMAIN
+path=$YNH_APP_ARG_PATH
+
+port=$(ynh_find_port --port=8081)
+ynh_app_setting_set --app=$app --key=port --value=$port
+
+#=================================================
+# DERIVE PUBLIC URLS
+#=================================================
+
+# Origin = scheme+host only, no path (origins never include a path)
+auth_origin="https://${domain}"
+# Public base = what the browser hits; nginx forwards __PATH__/api/* to
+# the backend's /api/* (see conf/nginx.conf), which is why no extra
+# "/api" segment is added here — the backend already prefixes its own
+# routes with /api/v1 internally.
+public_base_url="https://${domain}${path}"
+
+ynh_app_setting_set --app=$app --key=auth_origin --value=$auth_origin
+ynh_app_setting_set --app=$app --key=public_base_url --value=$public_base_url
+
+#=================================================
+# GENERATE SECRETS
+#=================================================
+
+jwt_secret=$(ynh_string_random --length=64)
+session_secret=$(ynh_string_random --length=64)
+better_auth_secret=$(ynh_string_random --length=64)
+ynh_app_setting_set --app=$app --key=jwt_secret --value=$jwt_secret
+ynh_app_setting_set --app=$app --key=session_secret --value=$session_secret
+ynh_app_setting_set --app=$app --key=better_auth_secret --value=$better_auth_secret
+ynh_app_setting_set --app=$app --key=redis_db --value=$redis_db
+
+#=================================================
+# DOWNLOAD, CHECK AND UNPACK SOURCE
+#=================================================
+
+# Upstream doesn't ship a source tarball per release, so we pin to a tag
+# and clone it directly instead of using the usual sources/ynh_setup_source
+# flow. Bump upstream_version in manifest.toml + this tag together on upgrade.
+upstream_version="v0.16.5"
+
+mkdir -p "$install_dir"
+ynh_exec_warn_less git clone --quiet --depth 1 --branch "$upstream_version" \
+    https://github.com/letehaha/budget-tracker.git "$install_dir"
+
+chmod 750 "$install_dir"
+chmod -R o-rwx "$install_dir"
+chown -R $app:www-data "$install_dir"
+
+#=================================================
+# INSTALL NODEJS
+#=================================================
+
+ynh_install_nodejs --nodejs_version=$nodejs_version
+
+#=================================================
+# BUILD BACKEND + FRONTEND
+#=================================================
+
+pushd "$install_dir"
+    ynh_exec_warn_less ynh_exec_as $app $ynh_node_load_PATH $ynh_npm ci
+    ynh_exec_warn_less ynh_exec_as $app $ynh_node_load_PATH $ynh_npm run build --workspace=$backend_workspace
+
+    # --base overrides vite.config's base regardless of what upstream set,
+    # so JS/CSS asset URLs resolve correctly when served under a subpath.
+    ynh_exec_warn_less ynh_exec_as $app $ynh_node_load_PATH \
+        $ynh_npm run build --workspace=$frontend_workspace -- --base="${path}/"
+popd
+
+#=================================================
+# CONFIGURE THE BACKEND ENV FILE
+#=================================================
+
+db_name=$(ynh_app_setting_get --app=$app --key=db_name)
+db_user=$(ynh_app_setting_get --app=$app --key=db_user)
+db_pwd=$(ynh_app_setting_get --app=$app --key=db_pwd)
+
+ynh_add_config --template="app.env" --destination="$install_dir/.env"
+chmod 400 "$install_dir/.env"
+chown $app:$app "$install_dir/.env"
+
+#=================================================
+# RUN DB MIGRATIONS
+#=================================================
+
+pushd "$install_dir"
+    # The backend loads $install_dir/.env itself (dotenv) on startup, so a
+    # plain workspace-scoped run picks up the same config the service uses.
+    ynh_exec_warn_less ynh_exec_as $app $ynh_node_load_PATH \
+        $ynh_npm run migrate --workspace=$backend_workspace
+popd
+
+#=================================================
+# SETUP SYSTEMD
+#=================================================
+
+ynh_add_systemd_config
+yunohost service add $app --description="Budget Tracker backend" --log="/var/log/$app/$app.log"
+
+mkdir -p /var/log/$app
+chown -R $app:$app /var/log/$app
+
+#=================================================
+# SETUP NGINX
+#=================================================
+
+ynh_add_nginx_config
+
+#=================================================
+# START THE APP
+#=================================================
+
+ynh_systemd_action --service_name=$app --action="start" \
+    --log_path="/var/log/$app/$app.log" --line_match="listening"
+
+#=================================================
+# SETUP SSOWAT PERMISSIONS
+#=================================================
+
+# App has its own auth (better-auth); it does not need to be behind
+# YunoHost SSO. init_main_permission (visitors, from manifest) already
+# leaves it open to the app's own login screen.
+
+ynh_permission_update --permission="main" --add="visitors"

@@ -1,0 +1,68 @@
+#:schema https://raw.githubusercontent.com/YunoHost/apps/master/schemas/manifest.v2.schema.json
+
+packaging_format = 2
+
+id = "budgettracker"
+name = "Budget Tracker"
+description.en = "Personal budget tracking application (MoneyMatter)"
+description.fr = "Application de suivi budgétaire personnel (MoneyMatter)"
+
+version = "0.16.5~ynh1"
+
+maintainers = []
+
+[upstream]
+license = "AGPL-3.0-only"
+website = "https://moneymatter.app"
+code = "https://github.com/letehaha/budget-tracker"
+
+[integration]
+yunohost = ">= 12.0.9"
+helpers_version = "2.1"
+architectures = "all"
+multi_instance = false
+ldap = false
+sso = false
+disk = "1G"
+ram.build = "2G"
+ram.runtime = "300M"
+
+[install]
+    [install.domain]
+    type = "domain"
+
+    [install.path]
+    type = "path"
+    default = "/budgettracker"
+
+    [install.init_main_permission]
+    type = "group"
+    default = "visitors"
+
+[resources]
+    [resources.sources.main]
+    # Pinned to release v0.16.5. Packaging script clones this tag directly
+    # (see scripts/install) rather than using a prebuilt tarball, since
+    # upstream doesn't publish source archives separately from the tag.
+    url = "https://github.com/letehaha/budget-tracker.git"
+    # not a real download resource (git clone handled manually in install) -
+    # kept here only for documentation / autoupdate hints.
+
+    [resources.system_user]
+
+    [resources.install_dir]
+    group = "www-data:r-x"
+
+    [resources.permissions]
+        [resources.permissions.main]
+        url = "/"
+
+    [resources.ports]
+        [resources.ports.main]
+        default = 8081
+
+    [resources.apt]
+    packages = "git, redis-server, build-essential, python3, libpq-dev"
+
+    [resources.database]
+    type = "postgresql"

@@ -1,0 +1,53 @@
+{
+  "name": "budget-tracker",
+  "private": true,
+  "description": "",
+  "license": "AGPL-3.0-only",
+  "author": "letehaha",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "npm -w budget-tracker-be run lint && npm -w budget-tracker-fe run lint",
+    "typecheck": "npm -w budget-tracker-be run typecheck && npm -w budget-tracker-fe run typecheck",
+    "landing:dev": "npm -w packages/landing run dev",
+    "landing:build": "npm -w packages/landing run build",
+    "test": "cross-env NODE_ENV=test npm -w packages/backend run test && npm -w packages/frontend run test",
+    "generate-ssl-certs": "chmod +x ./scripts/generate-ssl-certs.sh && ./scripts/generate-ssl-certs.sh",
+    "docker:dev": "bash ./scripts/docker-dev.sh up",
+    "docker:dev:build": "bash ./scripts/docker-dev.sh up --build",
+    "docker:dev:offline": "cross-env DOCKER_OFFLINE_MODE=true bash ./scripts/docker-dev.sh up",
+    "docker:dev:prepare-offline": "bash ./scripts/docker-dev.sh build && bash ./scripts/docker-dev.sh pull",
+    "docker:dev:frontend": "cross-env DOCKER_DEV_COMPOSE_FILE=./docker/dev/docker-compose.frontend-only.yml bash ./scripts/docker-dev.sh up --build",
+    "docker:dev:down": "bash ./scripts/docker-dev.sh down",
+    "docker:dev:logs": "bash ./scripts/docker-dev.sh logs -f",
+    "docker:dev:clean": "bash ./scripts/docker-dev.sh down -v --remove-orphans",
+    "docker:dev:rebuild": "bash ./scripts/docker-dev.sh build --no-cache",
+    "docker:dev:migrate": "bash ./scripts/docker-dev.sh exec backend bash -c 'cd /app/packages/backend && npx sequelize-cli db:migrate'",
+    "docker:dev:migrate-undo": "bash ./scripts/docker-dev.sh exec backend bash -c 'cd /app/packages/backend && npx sequelize-cli db:migrate:undo'",
+    "docker:prod": "docker compose -f ./docker/prod/docker-compose.yml --env-file .env.production build --no-cache && docker compose -f ./docker/prod/docker-compose.yml --env-file .env.production up",
+    "prepare": "node -e \"if (process.env.NODE_ENV !== 'production'){process.exit(1)} \" || husky",
+    "postinstall": "chmod +x ./post-install.sh && ./post-install.sh",
+    "format": "npx oxfmt .",
+    "format:check": "npx oxfmt --check .",
+    "knip": "npx -w packages/backend knip && npx -w packages/frontend knip"
+  },
+  "dependencies": {
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.7",
+    "tsconfig-paths": "^4.2.0"
+  },
+  "devDependencies": {
+    "@emnapi/core": "1.10.0",
+    "@emnapi/runtime": "1.10.0",
+    "@vue/compiler-sfc": "^3.5.13",
+    "husky": "9.1.7",
+    "knip": "^5.85.0",
+    "oxfmt": "^0.35.0",
+    "oxlint": "^1.50.0",
+    "typescript": "^5.9.3"
+  },
+  "volta": {
+    "node": "23.10.0"
+  }
+}
